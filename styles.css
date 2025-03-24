@@ -43,6 +43,8 @@ button:hover {
   position: relative;
   user-select: none;
   overflow: hidden;
+  resize: both;
+  width: 760px;
 }
 
 .letter {

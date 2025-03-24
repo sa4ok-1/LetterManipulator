@@ -1,6 +1,8 @@
 document.addEventListener("DOMContentLoaded", function () {
   const textInput = document.getElementById("text-input");
   const submitBtn = document.getElementById("submit-btn");
+  const undoBtn = document.getElementById("undo-btn");
+  const resizeBtn = document.getElementById("resize-btn");
   const textDisplay = document.getElementById("text-display");
 
   let letters = [];
@@ -10,10 +12,19 @@ document.addEventListener("DOMContentLoaded", function () {
   let selectionBox = null;
   let draggedLetters = [];
   let initialPositions = [];
+  let history = [];
 
   submitBtn.addEventListener("click", function () {
     const text = textInput.value;
     displayText(text);
+    saveState();
+  });
+
+  undoBtn.addEventListener("click", undoLastAction);
+
+  resizeBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    toggleResize();
   });
 
   function displayText(text) {
@@ -69,12 +80,10 @@ document.addEventListener("DOMContentLoaded", function () {
     const letter = e.target;
     const index = letter.dataset.index;
 
-    if (!selectedLetters.has(index)) {
-      if (!e.ctrlKey && !e.metaKey) {
-        clearSelection();
-        selectedLetters.add(index);
-        letter.classList.add("selected");
-      }
+    if (!selectedLetters.has(index) && !(e.ctrlKey || e.metaKey)) {
+      clearSelection();
+      selectedLetters.add(index);
+      letter.classList.add("selected");
     }
 
     draggedLetters = [];
@@ -102,10 +111,25 @@ document.addEventListener("DOMContentLoaded", function () {
     const deltaX = e.clientX - dragStartX;
     const deltaY = e.clientY - dragStartY;
 
+    const displayRect = textDisplay.getBoundingClientRect();
+
     draggedLetters.forEach((letter, index) => {
       const initial = initialPositions[index];
-      letter.style.left = initial.left + deltaX + "px";
-      letter.style.top = initial.top + deltaY + "px";
+      let newLeft = initial.left + deltaX;
+      let newTop = initial.top + deltaY;
+
+      const letterRect = letter.getBoundingClientRect();
+      newLeft = Math.max(
+        0,
+        Math.min(newLeft, displayRect.width - letterRect.width)
+      );
+      newTop = Math.max(
+        0,
+        Math.min(newTop, displayRect.height - letterRect.height)
+      );
+
+      letter.style.left = newLeft + "px";
+      letter.style.top = newTop + "px";
     });
   }
 
@@ -127,6 +151,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
 
+    saveState();
     draggedLetters = [];
     initialPositions = [];
   }
@@ -156,7 +181,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   textDisplay.addEventListener("mousedown", function (e) {
-    if (e.target.classList.contains("letter")) return;
+    if (e.target.classList.contains("letter") || e.target.tagName === "BUTTON")
+      return;
 
     dragStartX = e.clientX;
     dragStartY = e.clientY;
@@ -208,5 +234,67 @@ document.addEventListener("DOMContentLoaded", function () {
 
     selectionBox.remove();
     selectionBox = null;
+  }
+
+  function saveState() {
+    const state = letters.map((letter) => ({
+      text: letter.textContent,
+      left: letter.style.left,
+      top: letter.style.top,
+    }));
+    history.push(state);
+    if (history.length > 10) history.shift();
+  }
+
+  function undoLastAction() {
+    if (history.length < 2) return;
+
+    history.pop();
+    const previousState = history[history.length - 1];
+
+    textDisplay.innerHTML = "";
+    letters = [];
+    selectedLetters.clear();
+
+    previousState.forEach((state, i) => {
+      const letter = document.createElement("span");
+      letter.className = "letter";
+      letter.textContent = state.text;
+      letter.dataset.index = i;
+      letter.style.left = state.left;
+      letter.style.top = state.top;
+
+      letter.addEventListener("mousedown", startDrag);
+      letter.addEventListener("click", toggleSelection);
+
+      textDisplay.appendChild(letter);
+      letters.push(letter);
+    });
+  }
+
+  function toggleResize() {
+    const currentWidth = textDisplay.offsetWidth;
+    const currentHeight = textDisplay.offsetHeight;
+    textDisplay.style.width = currentWidth === 760 ? "500px" : "760px";
+    textDisplay.style.minHeight = currentHeight === 240 ? "150px" : "200px";
+
+    const displayRect = textDisplay.getBoundingClientRect();
+    letters.forEach((letter) => {
+      const letterRect = letter.getBoundingClientRect();
+      let newLeft = parseFloat(letter.style.left);
+      let newTop = parseFloat(letter.style.top);
+
+      newLeft = Math.max(
+        0,
+        Math.min(newLeft, displayRect.width - letterRect.width)
+      );
+      newTop = Math.max(
+        0,
+        Math.min(newTop, displayRect.height - letterRect.height)
+      );
+
+      letter.style.left = newLeft + "px";
+      letter.style.top = newTop + "px";
+    });
   }
 });
